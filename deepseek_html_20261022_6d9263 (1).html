@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Доведи лошадку до стойла</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: linear-gradient(180deg, #a8e6cf 0%, #dcedc1 60%, #ffd3b6 100%);
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .card {
+    background: #fff; border-radius: 22px; padding: 22px;
+    max-width: 820px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  }
+  h1 { font-size: 1.35rem; color: #2d6a4f; text-align: center; margin-bottom: 4px; }
+  .subtitle { text-align: center; color: #888; font-size: 0.85rem; margin-bottom: 16px; }
+
+  /* --- Поле-дорожка --- */
+  .track-wrap {
+    background: linear-gradient(180deg,#e8f5e9,#f1f8e9);
+    border-radius: 16px; padding: 16px 10px; margin-bottom: 16px;
+    position: relative; overflow: hidden;
+  }
+  .track {
+    display: flex; align-items: center; justify-content: space-between;
+    position: relative; height: 70px;
+  }
+  .track::before {
+    content: ''; position: absolute; left: 30px; right: 30px; top: 50%;
+    height: 6px; background: repeating-linear-gradient(90deg,#c8b48a 0 14px,#a98f5f 14px 28px);
+    transform: translateY(-50%); border-radius: 3px; z-index: 0;
+  }
+  .cell {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #fff; border: 3px solid #b5c9a8;
+    position: relative; z-index: 1; flex-shrink: 0;
+    transition: all .3s;
+  }
+  .cell.passed { background: #95d5b2; border-color: #52b788; }
+  .cell.finish {
+    width: 46px; height: 46px; background: #fff3cd; border-color: #d4a017;
+    display: flex; align-items: center; justify-content: center; font-size: 1.4rem;
+  }
+  .horse {
+    position: absolute; font-size: 2.1rem; top: 50%; left: 0;
+    transform: translateY(-50%); transition: left .5s cubic-bezier(.4,1.4,.6,1);
+    z-index: 2; filter: drop-shadow(0 3px 4px rgba(0,0,0,.2));
+  }
+  .horse.jump { animation: jump .5s ease; }
+  @keyframes jump {
+    0%,100% { transform: translateY(-50%); }
+    50% { transform: translateY(-110%) scale(1.15); }
+  }
+  .track-info {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 10px; font-size: .85rem; color: #555;
+  }
+  .track-info b { color: #2d6a4f; }
+
+  /* --- Панель баллов --- */
+  .topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    background: #f4f8ff; border-radius: 14px; padding: 10px 16px; margin-bottom: 14px;
+    flex-wrap: wrap; gap: 10px; font-weight: 700; color: #2d6a4f;
+  }
+  .topbar .item { display: flex; align-items: center; gap: 6px; font-size: 1rem; }
+  .lives { display: flex; gap: 4px; font-size: 1.1rem; }
+  .lives .lost { filter: grayscale(1); opacity: .3; }
+
+  /* --- Прогресс вопросов --- */
+  .progress-bar { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin-bottom: 6px; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg,#52b788,#2d6a4f); width: 0%; transition: width .4s ease; }
+  .progress-text { text-align: right; font-size: 0.8rem; color: #999; margin-bottom: 12px; }
+
+  /* --- Вопрос --- */
+  .question { font-size: 1.02rem; color: #222; margin-bottom: 6px; line-height: 1.5; font-weight: 600; }
+  .task-hint { font-size: 0.85rem; color: #52b788; margin-bottom: 14px; font-style: italic; }
+  .options { display: flex; flex-direction: column; gap: 9px; }
+  .option {
+    padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 12px;
+    cursor: pointer; transition: all .2s; font-size: 0.94rem; background: #fafafa;
+    text-align: left; color: #333; display: flex; gap: 10px; align-items: flex-start;
+  }
+  .option:hover:not(.disabled) { border-color: #52b788; background: #effaf4; }
+  .option .mark {
+    flex-shrink: 0; width: 22px; height: 22px; border: 2px solid #bbb; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem;
+    color: #fff; margin-top: 1px;
+  }
+  .option.selected { border-color: #52b788; background: #e3f7ed; }
+  .option.selected .mark { background: #52b788; border-color: #52b788; }
+  .option.correct { border-color: #22c55e; background: #dcfce7; color: #166534; }
+  .option.correct .mark { background: #22c55e; border-color: #22c55e; }
+  .option.wrong { border-color: #ef4444; background: #fee2e2; color: #991b1b; }
+  .option.wrong .mark { background: #ef4444; border-color: #ef4444; }
+  .option.disabled { cursor: default; }
+
+  .feedback { margin-top: 14px; padding: 14px; border-radius: 12px; font-size: .9rem; line-height: 1.5; display: none; }
+  .feedback.show { display: block; }
+  .feedback.ok { background: #dcfce7; color: #166534; border-left: 4px solid #22c55e; }
+  .feedback.no { background: #fee2e2; color: #991b1b; border-left: 4px solid #ef4444; }
+  .feedback b { display: block; margin-bottom: 4px; }
+
+  .btn {
+    margin-top: 16px; width: 100%; padding: 13px; border: none; border-radius: 12px;
+    background: linear-gradient(90deg,#52b788,#2d6a4f); color: #fff; font-size: 1rem;
+    font-weight: 600; cursor: pointer; transition: opacity .2s;
+  }
+  .btn:hover { opacity: .9; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* --- Финал --- */
+  .result { text-align: center; }
+  .result .emoji { font-size: 4rem; margin-bottom: 10px; }
+  .result .score { font-size: 1.9rem; font-weight: 700; color: #2d6a4f; margin-bottom: 6px; }
+  .result .title { font-size: 1.2rem; color: #52b788; font-weight: 700; margin-bottom: 14px; }
+  .result .message { color: #666; line-height: 1.6; margin-bottom: 18px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div id="game-screen">
+    <h1>🐴 Доведи лошадку до стойла</h1>
+    <div class="subtitle">Каждый верный ответ — шаг вперёд. Ошибка — шаг назад!</div>
+
+    <!-- Дорожка -->
+    <div class="track-wrap">
+      <div class="track" id="track">
+        <div class="horse" id="horse">🐴</div>
+      </div>
+      <div class="track-info">
+        <span>Шаг: <b id="step-label">0</b> / <b id="step-total">10</b></span>
+        <span>До стойла: <b id="to-home">10</b> шагов</span>
+      </div>
+    </div>
+
+    <!-- Панель -->
+    <div class="topbar">
+      <div class="item">⭐ <span id="score">0</span> баллов</div>
+      <div class="item">🏆 Рекорд: <span id="best">0</span></div>
+      <div class="lives" id="lives"></div>
+    </div>
+
+    <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+    <div class="progress-text" id="progress-text">Вопрос 1 из 10</div>
+
+    <div class="question" id="question">Загрузка...</div>
+    <div class="task-hint">Выберите два верных высказывания (нажмите на два варианта)</div>
+    <div class="options" id="options"></div>
+    <div class="feedback" id="feedback"></div>
+    <button class="btn" id="check-btn" disabled>Проверить</button>
+  </div>
+
+  <div id="result-screen" class="hidden result">
+    <div class="emoji" id="result-emoji">🏆</div>
+    <div class="score" id="result-score">0 баллов</div>
+    <div class="title" id="result-title"></div>
+    <div class="message" id="result-message"></div>
+    <button class="btn" onclick="restart()">🔄 Играть снова</button>
+  </div>
+</div>
+
+<script>
+const TOTAL_STEPS = 10;   // сколько шагов до стойла
+const MAX_Q = 15;         // максимум вопросов (если не дошёл раньше)
+
+const questions = [
+  {
+    q: "Выберите два высказывания, в которых говорится о железе как химическом элементе.",
+    options: [
+      "Пирит является сырьём для получения железа",
+      "Железо реагирует с хлором",
+      "Гемоглобин, содержащий железо, переносит кислород",
+      "В состав ржавчины входит железо",
+      "Железо быстро ржавеет во влажном воздухе"
+    ],
+    correct: [2, 3],
+    explain: "Химический элемент — атомы в составе вещества. Гемоглобин и ржавчина содержат атомы железа. Остальное — о простом веществе."
+  },
+  {
+    q: "Выберите два высказывания, в которых говорится о кислороде как химическом элементе.",
+    options: [
+      "Кислород поддерживает горение",
+      "В состав воды входит кислород",
+      "Кислород — газ без цвета и запаха",
+      "Кислород входит в состав углекислого газа",
+      "Жидкий кислород имеет голубой цвет"
+    ],
+    correct: [1, 3],
+    explain: "В составе воды (H₂O) и углекислого газа (CO₂) есть атомы кислорода — это элемент. Горение, цвет — свойства простого вещества O₂."
+  },
+  {
+    q: "Выберите два высказывания, в которых говорится о водороде как химическом элементе.",
+    options: [
+      "Водород — самый лёгкий газ",
+      "Водород входит в состав серной кислоты",
+      "Водород горит с образованием воды",
+      "Водород входит в состав метана CH₄",
+      "Водород плохо растворяется в воде"
+    ],
+    correct: [1, 3],
+    explain: "В серной кислоте (H₂SO₄) и метане (CH₄) есть атомы водорода — это элемент. Остальное — свойства простого вещества H₂."
+  },
+  {
+    q: "Выберите два высказывания, в которых говорится об алюминии как химическом элементе.",
+    options: [
+      "Алюминий — лёгкий металл серебристого цвета",
+      "Алюминий входит в состав глины",
+      "Алюминий реагирует с соляной кислотой",
+      "Алюминий входит в состав минерала корунда",
+      "Алюминий хорошо проводит электрический ток"
+    ],
+    correct: [1, 3],
+    explain: "В глине и корунде есть атомы алюминия — это элемент. Остальное — свойства простого вещества."
+  },
+  {
+    q: "Выберите два высказывания, в которых говорится о кислороде как простом веществе.",
+    options: [
+      "Кислород входит в состав белков",
+      "Кислород необходим для дыхания",
+      "Кислород входит в состав оксида магния",
+      "Кислород получают из жидкого воздуха",
+      "В состав воды входит кислород"
+    ],
+    correct: [1, 3],
+    explain: "Дыхание и получение из воздуха — о простом веществе O₂. Остальное — о химическом элементе."
+  },
+  {
+    q: "Выберите два высказывания, в которых говорится об азоте как химическом элементе.",
+    options: [
+      "Азот — газ без цвета и запаха",
+      "Азот входит в состав аммиака NH₃",
+      "Азот не поддерживает горение",
+      "Азот входит в состав азотной кислоты HNO₃",
+      "Азот сжижается при низкой температуре"
+    ],
+    correct: [1, 3],
+    explain: "В аммиаке (NH₃) и азотной кислоте (HNO₃) есть атомы азота — это элемент. Остальное — свойства простого вещества N₂."
+  },
+  {
+    q: "Выберите два высказывания, в которых говорится об углероде как химическом элементе.",
+    options: [
+      "Углерод — твёрдое вещество чёрного цвета",
+      "Углерод входит в состав углекислого газа",
+      "Уголь — это углерод, он горит",
+      "Углерод входит в состав белков и жиров",
+      "Углерод проводит электрический ток"
+    ],
+    correct: [1, 3],
+    explain: "В CO₂ и в составе белков/жиров есть атомы углерода — это элемент. Остальное — свойства простого вещества (угля, графита)."
+  },
+  {
+    q: "Выберите два высказывания, в которых говорится о сере как химическом элементе.",
+    options: [
+      "Сера — жёлтое кристаллическое вещество",
+      "Сера входит в состав сероводорода H₂S",
+      "Сера горит синим пламенем",
+      "Сера входит в состав серной кислоты H₂SO₄",
+      "Сера не растворяется в воде"
+    ],
+    correct: [1, 3],
+    explain: "В сероводороде (H₂S) и серной кислоте (H₂SO₄) есть атомы серы — это элемент. Остальное — свойства простого вещества."
+  },
+  {
+    q: "Выберите два высказывания, в которых говорится о меди как химическом элементе.",
+    options: [
+      "Медь — металл красноватого цвета",
+      "Медь входит в состав малахита",
+      "Медь хорошо проводит ток",
+      "Медь входит в состав медного купороса CuSO₄",
+      "Медь реагирует с кислородом"
+    ],
+    correct: [1, 3],
+    explain: "В малахите и медном купоросе есть атомы меди — это элемент. Цвет, проводимость, реакции — свойства простого вещества."
+  },
+  {
+    q: "Выберите два высказывания, в которых говорится о кальции как химическом элементе.",
+    options: [
+      "Кальций — мягкий металл",
+      "Кальций входит в состав костей и зубов",
+      "Кальций реагирует с водой",
+      "Кальций входит в состав известняка CaCO₃",
+      "Кальций хранят под слоем керосина"
+    ],
+    correct: [1, 3],
+    explain: "В костях и известняке есть атомы кальция — это элемент. Остальное — свойства простого вещества."
+  },
+  {
+    q: "Выберите два высказывания, в которых говорится о натрии как химическом элементе.",
+    options: [
+      "Натрий — мягкий металл, режется ножом",
+      "Натрий входит в состав поваренной соли NaCl",
+      "Натрий реагирует с водой",
+      "Натрий входит в состав соды Na₂CO₃",
+      "Натрий хранят под слоем керосина"
+    ],
+    correct: [1, 3],
+    explain: "В поваренной соли и соде есть атомы натрия — это элемент. Остальное — свойства простого вещества."
+  },
+  {
+    q: "Выберите два высказывания, в которых говорится о фосфоре как химическом элементе.",
+    options: [
+      "Фосфор — твёрдое вещество",
+      "Фосфор входит в состав костей",
+      "Фосфор светится в темноте",
+      "Фосфор входит в состав фосфорной кислоты H₃PO₄",
+      "Фосфор бывает красным и белым"
+    ],
+    correct: [1, 3],
+    explain: "В костях и фосфорной кислоте есть атомы фосфора — это элемент. Свечение, цвет — свойства простого вещества."
+  },
+  {
+    q: "Выберите два высказывания, в которых говорится о хлоре как химическом элементе.",
+    options: [
+      "Хлор — жёлто-зелёный газ",
+      "Хлор входит в состав поваренной соли",
+      "Хлор убивает бактерии",
+      "Хлор входит в состав соляной кислоты HCl",
+      "Хлор тяжелее воздуха"
+    ],
+    correct: [1, 3],
+    explain: "В поваренной соли (NaCl) и соляной кислоте (HCl) есть атомы хлора — это элемент. Остальное — свойства простого вещества Cl₂."
+  },
+  {
+    q: "Выберите два высказывания, в которых говорится о цинке как химическом элементе.",
+    options: [
+      "Цинк — металл серебристо-серого цвета",
+      "Цинк входит в состав цинковой обманки ZnS",
+      "Цинк реагирует с кислотами",
+      "Цинк входит в состав сульфата цинка ZnSO₄",
+      "Цинк используют для покрытия железа"
+    ],
+    correct: [1, 3],
+    explain: "В цинковой обманке и сульфате цинка есть атомы цинка — это элемент. Остальное — свойства простого вещества."
+  },
+  {
+    q: "Выберите два высказывания, в которых говорится о барии как химическом элементе.",
+    options: [
+      "Барий — мягкий металл",
+      "Барий входит в состав бариевой селитры Ba(NO₃)₂",
+      "Барий реагирует с водой",
+      "Барий входит в состав сульфата бария BaSO₄",
+      "Барий хранят под слоем керосина"
+    ],
+    correct: [1, 3],
+    explain: "В бариевой селитре и сульфате бария есть атомы бария — это элемент. Остальное — свойства простого вещества."
+  }
+];
+
+let current = 0, score = 0, lives = 3, step = 0, answered = false, selected = [];
+let pool = [];
+const $ = id => document.getElementById(id);
+
+// Перемешивание
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function buildTrack() {
+  const track = $('track');
+  track.innerHTML = '';
+  // Ячейки: старт + промежуточные + финиш
+  for (let i = 0; i <= TOTAL_STEPS; i++) {
+    const c = document.createElement('div');
+    if (i === TOTAL_STEPS) {
+      c.className = 'cell finish';
+      c.textContent = '🏠';
+    } else {
+      c.className = 'cell';
+    }
+    c.dataset.i = i;
+    track.appendChild(c);
+  }
+  const horse = document.createElement('div');
+  horse.className = 'horse';
+  horse.id = 'horse';
+  horse.textContent = '🐴';
+  track.appendChild(horse);
+  updateHorse();
+}
+
+function updateHorse() {
+  const track = $('track');
+  const cells = track.querySelectorAll('.cell');
+  const horse = $('horse');
+  if (!cells.length || !horse) return;
+
+  const cell = cells[Math.min(step, TOTAL_STEPS)];
+  const cellRect = cell.getBoundingClientRect();
+  const trackRect = track.getBoundingClientRect();
+  const left = cellRect.left - trackRect.left + cellRect.width / 2 - 20;
+  horse.style.left = left + 'px';
+
+  horse.classList.remove('jump');
+  void horse.offsetWidth;
+  horse.classList.add('jump');
+
+  cells.forEach((c, i) => {
+    c.classList.toggle('passed', i < step && i !== TOTAL_STEPS);
+  });
+
+  $('step-label').textContent = step;
+  $('step-total').textContent = TOTAL_STEPS;
+  $('to-home').textContent = Math.max(0, TOTAL_STEPS - step);
+}
+
+function renderLives() {
+  $('lives').innerHTML = '';
+  for (let i = 0; i < 3; i++) {
+    const s = document.createElement('span');
+    s.textContent = '❤️';
+    if (i >= lives) s.classList.add('lost');
+    $('lives').appendChild(s);
+  }
+}
+
+function updateBest() {
+  const best = parseInt(localStorage.getItem('horse_best') || '0', 10);
+  $('best').textContent = best;
+}
+
+function saveBest() {
+  const best = parseInt(localStorage.getItem('horse_best') || '0', 10);
+  if (score > best) localStorage.setItem('horse_best', score);
+  updateBest();
+}
+
+function render() {
+  answered = false; selected = [];
+  const q = pool[current];
+  $('question').textContent = q.q;
+  $('progress').style.width = (current / Math.min(MAX_Q, pool.length) * 100) + '%';
+  $('progress-text').textContent = `Вопрос ${current + 1} из ${Math.min(MAX_Q, pool.length)}`;
+  $('score').textContent = score;
+  renderLives();
+  updateHorse();
+
+  const opts = $('options');
+  opts.innerHTML = '';
+  q.options.forEach((text, i) => {
+    const btn = document.createElement('div');
+    btn.className = 'option';
+    btn.innerHTML = `<span class="mark"></span><span>${text}</span>`;
+    btn.onclick = () => toggle(i, btn);
+    opts.appendChild(btn);
+  });
+
+  $('feedback').className = 'feedback';
+  $('feedback').innerHTML = '';
+  $('check-btn').disabled = true;
+  $('check-btn').textContent = (step >= TOTAL_STEPS || lives === 0)
+    ? 'Показать результат 🏁' : 'Проверить';
+}
+
+function toggle(i, btn) {
+  if (answered) return;
+  if (selected.includes(i)) {
+    selected = selected.filter(x => x !== i);
+    btn.classList.remove('selected');
+    btn.querySelector('.mark').textContent = '';
+  } else {
+    if (selected.length >= 2) return;
+    selected.push(i);
+    btn.classList.add('selected');
+    btn.querySelector('.mark').textContent = '✓';
+  }
+  $('check-btn').disabled = selected.length !== 2;
+}
+
+$('check-btn').onclick = () => {
+  if (!answered) {
+    answered = true;
+    const q = pool[current];
+    const buttons = document.querySelectorAll('.option');
+    buttons.forEach(b => b.classList.add('disabled'));
+
+    q.correct.forEach(i => {
+      buttons[i].classList.add('correct');
+      buttons[i].querySelector('.mark').textContent = '✓';
+    });
+    selected.forEach(i => {
+      if (!q.correct.includes(i)) {
+        buttons[i].classList.remove('selected');
+        buttons[i].classList.add('wrong');
+        buttons[i].querySelector('.mark').textContent = '✗';
+      }
+    });
+
+    const isCorrect = selected.length === 2 &&
+      q.correct.every(i => selected.includes(i));
+
+    const fb = $('feedback');
+    if (isCorrect) {
+      score++;
+      step = Math.min(TOTAL_STEPS, step + 1);
+      fb.className = 'feedback show ok';
+      fb.innerHTML = `<b>✅ Верно! +1 балл, лошадка шагает вперёд 🐴</b>${q.explain}`;
+    } else {
+      lives--;
+      step = Math.max(0, step - 1);
+      fb.className = 'feedback show no';
+      fb.innerHTML = `<b>❌ Ошибка. −1 жизнь, лошадка отступает на шаг назад 💔</b>${q.explain}`;
+    }
+
+    $('score').textContent = score;
+    renderLives();
+    updateHorse();
+
+    if (step >= TOTAL_STEPS) {
+      $('check-btn').textContent = 'Показать результат 🏁';
+    } else if (lives === 0) {
+      $('check-btn').textContent = 'Показать результат 🏁';
+    } else {
+      $('check-btn').textContent = (current === Math.min(MAX_Q, pool.length) - 1)
+        ? 'Показать результат 🏁' : 'Далее →';
+    }
+  } else {
+    if (step >= TOTAL_STEPS || lives === 0) { showResult(); return; }
+    current++;
+    if (current < Math.min(MAX_Q, pool.length)) render();
+    else showResult();
+  }
+};
+
+function showResult() {
+  $('game-screen').classList.add('hidden');
+  $('result-screen').classList.remove('hidden');
+  saveBest();
+
+  $('result-score').textContent = `${score} баллов · шаг ${step}/${TOTAL_STEPS}`;
+
+  let emoji, title, message;
+  if (step >= TOTAL_STEPS) {
+    emoji = '🏠'; title = 'Лошадка дома!';
+    message = `Вы довели лошадку до стойла за ${score} верных ответов! Отличная работа.`;
+  } else if (lives === 0) {
+    emoji = '💔'; title = 'Жизни закончились...';
+    message = `Лошадка не дошла до стойла — ${step} из ${TOTAL_STEPS} шагов. Попробуйте снова!`;
+  } else {
+    emoji = '🏁'; title = 'Вопросы закончились';
+    message = `Лошадка прошла ${step} из ${TOTAL_STEPS} шагов. Ещё немного — и она будет дома!`;
+  }
+
+  $('result-emoji').textContent = emoji;
+  $('result-title').textContent = title;
+  $('result-message').textContent = message;
+}
+
+function restart() {
+  current = 0; score = 0; lives = 3; step = 0; selected = [];
+  pool = shuffle(questions).slice(0, MAX_Q);
+  $('result-screen').classList.add('hidden');
+  $('game-screen').classList.remove('hidden');
+  buildTrack();
+  render();
+}
+
+// Старт
+pool = shuffle(questions).slice(0, MAX_Q);
+buildTrack();
+updateBest();
+render();
+window.addEventListener('resize', updateHorse);
+</script>
+</body>
+</html>
